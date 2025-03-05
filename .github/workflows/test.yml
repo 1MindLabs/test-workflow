@@ -125,4 +125,18 @@ jobs:
                   }
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f done_value=${{ env.DONE_OPTION_ID }}
+          
+          # If issue is closed as duplicate or not planned, remove from project
+          elif [[ "${{ github.event.action }}" == "closed" && \
+                  ("${{ github.event.issue.state_reason }}" == "duplicate" || \
+                   "${{ github.event.issue.state_reason }}" == "not_planned") ]]; then
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!) {
+                deleteProjectV2Item(input: {
+                  projectId: $project
+                  itemId: $item
+                }) {
+                  deletedItemId
+                }
+              }' -f project=$PROJECT_ID -f item=$ITEM_ID
           fi
