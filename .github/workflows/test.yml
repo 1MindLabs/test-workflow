@@ -1,14 +1,18 @@
-name: Manage Issue Project Workflow
+name: Clean Project Board
 on:
-  issues:
-    types:
-      - opened
-      - reopened
-      - assigned
-      - closed
+  # Run weekly, or adjust as needed
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight
+  # Optional: Allow manual triggering
+  workflow_dispatch:
+
 jobs:
-  manage_issue_project:
+  clean_project_board:
     runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      actions: read
+
     steps:
       - name: Generate token
         id: generate-token
@@ -16,7 +20,7 @@ jobs:
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PEM }}
-      
+
       - name: Get project data
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -28,108 +32,44 @@ jobs:
               organization(login: $org){
                 projectV2(number: $number) {
                   id
-                  fields(first: 20) {
-                    nodes {
-                      ... on ProjectV2Field {
+                }
+              }
+            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
+          echo 'PROJECT_ID='$(jq '.data.organization.projectV2.id' project_data.json) >> $GITHUB_ENV
+
+      - name: Clean Project Board
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          # Fetch all items in the project
+          gh api graphql -f query='
+            query($project:ID!) {
+              projectV2(id: $project) {
+                items(first: 100) {
+                  nodes {
+                    id
+                    content {
+                      ... on Issue {
                         id
-                        name
-                      }
-                      ... on ProjectV2SingleSelectField {
-                        id
-                        name
-                        options {
-                          id
-                          name
-                        }
+                        title
+                        state
+                        stateReason
                       }
                     }
                   }
                 }
               }
-            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
-          echo 'PROJECT_ID='$(jq '.data.organization.projectV2.id' project_data.json) >> $GITHUB_ENV
-          echo 'STATUS_FIELD_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'TRIAGE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Triage") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'IN_PROGRESS_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'DONE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' project_data.json) >> $GITHUB_ENV
+            }' -f project=$PROJECT_ID > project_items.json
 
-      - name: Add Issue to Project
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          ISSUE_ID: ${{ github.event.issue.node_id }}
-        run: |
-          item_id="$( gh api graphql -f query='
-            mutation($project:ID!, $issue:ID!) {
-              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
-                item {
-                  id
-                }
-              }
-            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
-          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
+          # Process and remove closed issues marked as duplicate or not planned
+          items_to_remove=$(jq -r '.data.projectV2.items.nodes[] | 
+            select(.content.state == "CLOSED" and 
+                   (.content.stateReason == "DUPLICATE" or .content.stateReason == "NOT_PLANNED")) | 
+            .id' project_items.json)
 
-      - name: Update Issue Status
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          # If issue is newly created, set status to Triage
-          if [[ "${{ github.event.action }}" == "opened" || "${{ github.event.action }}" == "reopened" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $triage_value
-                  }
-                }) {
-                  projectV2Item {
-                    id
-                  }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
-          
-          # If issue is assigned, set status to In Progress
-          elif [[ "${{ github.event.action }}" == "assigned" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $in_progress_value
-                  }
-                }) {
-                  projectV2Item {
-                    id
-                  }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
-          
-          # If issue is closed as completed, set status to Done
-          elif [[ "${{ github.event.action }}" == "closed" && "${{ github.event.issue.state_reason }}" == "completed" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $done_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $done_value
-                  }
-                }) {
-                  projectV2Item {
-                    id
-                  }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f done_value=${{ env.DONE_OPTION_ID }}
-          
-          # If issue is closed as duplicate or not planned, remove from project
-          elif [[ "${{ github.event.action }}" == "closed" && \
-                  ("${{ github.event.issue.state_reason }}" == "duplicate" || \
-                   "${{ github.event.issue.state_reason }}" == "not_planned") ]]; then
+          # Remove items from the project board
+          for item_id in $items_to_remove; do
+            echo "Removing item: $item_id"
             gh api graphql -f query='
               mutation($project: ID!, $item: ID!) {
                 deleteProjectV2Item(input: {
@@ -138,5 +78,13 @@ jobs:
                 }) {
                   deletedItemId
                 }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID
-          fi
+              }' -f project=$PROJECT_ID -f item=$item_id
+          done
+
+      - name: Log Cleanup
+        if: always()
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          echo "Project board cleanup completed."
+          echo "Total items removed: $(echo "$items_to_remove" | wc -l)"
