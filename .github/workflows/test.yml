@@ -1,40 +1,84 @@
 name: Automate Issues to Project
 on:
   issues:
-    types: [opened, reopened, closed, assigned]
+    types:
+      - opened
+      - reopened
+      - closed
+      - assigned
 
 jobs:
-  update_project_status:
+  issue_opened_and_reopened:
+    name: issue_opened_and_reopened
     runs-on: ubuntu-latest
+    if: github.repository == '1MindLabs/test-workflow' && (github.event.action == 'opened' || github.event.action == 'reopened')
     steps:
-      - name: Move Issue in Project
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const projectId = 8;
-            const issueNodeId = context.payload.issue.node_id;
-            let status = "";
-
-            if (context.payload.action === "opened" || context.payload.action === "reopened") {
-              status = "Triage";
-            } else if (context.payload.action === "assigned") {
-              status = "In Progress";
-            } else if (context.payload.action === "closed") {
-              status = "Done";
+      - name: Move issue to "Triage"
+        run: |
+          gh api graphql -f query='
+          mutation {
+            updateProjectV2ItemFieldValue(
+              input: {
+                projectId: "PVT_kwDOCrqp684Azk1R" 
+                itemId: "${{ github.event.issue.node_id }}" 
+                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
+                value: { singleSelectOptionId: "f75ad846" }
+              }
+            ) {
+              projectV2Item {
+                id
+              }
             }
+          }'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            if (status) {
-              await github.graphql(`
-                mutation {
-                  updateProjectV2ItemFieldValue(input: {
-                    projectId: "${projectId}",
-                    itemId: "${issueNodeId}",
-                    fieldId: "status", 
-                    value: "${status}"
-                  }) {
-                    clientMutationId
-                  }
-                }
-              `);
+  issue_closed:
+    name: issue_closed
+    runs-on: ubuntu-latest
+    if: github.repository == '1MindLabs/test-workflow' && github.event.action == 'closed'
+    steps:
+      - name: Move issue to "Done"
+        run: |
+          gh api graphql -f query='
+          mutation {
+            updateProjectV2ItemFieldValue(
+              input: {
+                projectId: "PVT_kwDOCrqp684Azk1R"
+                itemId: "${{ github.event.issue.node_id }}"
+                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
+                value: { singleSelectOptionId: "98236657" }
+              }
+            ) {
+              projectV2Item {
+                id
+              }
             }
+          }'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  issue_assigned:
+    name: issue_assigned
+    runs-on: ubuntu-latest
+    if: github.repository == '1MindLabs/test-workflow' && github.event.action == 'assigned'
+    steps:
+      - name: Move issue to "In Progress"
+        run: |
+          gh api graphql -f query='
+          mutation {
+            updateProjectV2ItemFieldValue(
+              input: {
+                projectId: "PVT_kwDOCrqp684Azk1R"
+                itemId: "${{ github.event.issue.node_id }}"
+                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
+                value: { singleSelectOptionId: "47fc9ee4" }
+              }
+            ) {
+              projectV2Item {
+                id
+              }
+            }
+          }'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
