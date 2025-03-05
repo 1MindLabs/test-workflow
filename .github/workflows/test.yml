@@ -4,14 +4,14 @@ on:
   issues:
     types:
       - opened
-      - reopened
-      - closed
       - assigned
 
 jobs:
-  issue_management:
+  manage_issues:
+    name: Manage Issues in Project
     runs-on: ubuntu-latest
     steps:
+      # 🔹 Generate GitHub App Token
       - name: Generate token
         id: generate-token
         uses: actions/create-github-app-token@v1
@@ -19,113 +19,39 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PEM }}
 
-      - name: Get project and field IDs
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          ORGANIZATION: 1MindLabs
-          PROJECT_NUMBER: 8
-        run: |
-          gh api graphql -f query='
-            query($org: String!, $number: Int!) {
-              organization(login: $org) {
-                projectV2(number: $number) {
-                  id
-                  fields(first: 20) {
-                    nodes {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
-                      ... on ProjectV2SingleSelectField {
-                        id
-                        name
-                        options {
-                          id
-                          name
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
-
-          echo 'PROJECT_ID='$(jq '.data.organization.projectV2.id' project_data.json) >> $GITHUB_ENV
-          echo 'STATUS_FIELD_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'TRIAGE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Triage") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'IN_PROGRESS_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'DONE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' project_data.json) >> $GITHUB_ENV
-
+      # 🔹 Add issue to project when opened
       - name: Add Issue to Project
         if: github.event.action == 'opened'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ORGANIZATION: 1MindLabs
+          PROJECT_NUMBER: 8
           ISSUE_ID: ${{ github.event.issue.node_id }}
         run: |
-          item_id="$( gh api graphql -f query='
+          project_id="$(gh api graphql -f query='
+            query($org: String!, $number: Int!) {
+              organization(login: $org){
+                projectV2(number: $number) {
+                  id
+                }
+              }
+            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER --jq '.data.organization.projectV2.id')"
+
+          gh api graphql -f query='
             mutation($project: ID!, $issue: ID!) {
-              addProjectV2ItemById(input: { projectId: $project, contentId: $issue }) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
                 item {
                   id
                 }
               }
-            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
+            }' -f project=$project_id -f issue=$ISSUE_ID
 
-          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
-
-      - name: Move Issue to "Triage"
-        if: github.event.action == 'opened' || github.event.action == 'reopened'
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $project,
-                itemId: $item,
-                fieldId: $status_field,
-                value: { singleSelectOptionId: $status_value }
-              }) {
-                projectV2Item {
-                  id
-                }
-              }
-            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f status_value=$TRIAGE_OPTION_ID
-
-      - name: Move Issue to "In Progress"
+      # 🔹 Label issue as "In Progress" when assigned
+      - name: Label Issue "In Progress"
         if: github.event.action == 'assigned'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
         run: |
-          gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $project,
-                itemId: $item,
-                fieldId: $status_field,
-                value: { singleSelectOptionId: $status_value }
-              }) {
-                projectV2Item {
-                  id
-                }
-              }
-            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f status_value=$IN_PROGRESS_OPTION_ID
-
-      - name: Move Issue to "Done"
-        if: github.event.action == 'closed'
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $project,
-                itemId: $item,
-                fieldId: $status_field,
-                value: { singleSelectOptionId: $status_value }
-              }) {
-                projectV2Item {
-                  id
-                }
-              }
-            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f status_value=$DONE_OPTION_ID
+          gh api repos/$REPO/issues/$ISSUE_NUMBER/labels -f labels='["In Progress"]'
