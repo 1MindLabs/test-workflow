@@ -7,6 +7,12 @@ on:
       - closed
       - assigned
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  repository-projects: write
+
 jobs:
   issue_opened_and_reopened:
     name: issue_opened_and_reopened
