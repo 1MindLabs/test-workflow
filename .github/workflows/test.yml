@@ -53,44 +53,22 @@ jobs:
           echo 'IN_PROGRESS_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' project_data.json) >> $GITHUB_ENV
           echo 'DONE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' project_data.json) >> $GITHUB_ENV
 
-      - name: Add Issue to Project or Manage Issue
+      - name: Add Issue to Project
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           ISSUE_ID: ${{ github.event.issue.node_id }}
         run: |
-          # If issue is newly created, add to project
-          if [[ "${{ github.event.action }}" == "opened" || "${{ github.event.action }}" == "reopened" ]]; then
-            item_id="$( gh api graphql -f query='
-              mutation($project:ID!, $issue:ID!) {
-                addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
-                  item {
-                    id
-                  }
+          item_id="$( gh api graphql -f query='
+            mutation($project:ID!, $issue:ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                item {
+                  id
                 }
-              }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
-            echo 'ITEM_ID='$item_id >> $GITHUB_ENV
-          
-          # Find the item ID if the issue is already in the project
-          elif [[ "${{ github.event.action }}" == "assigned" || "${{ github.event.action }}" == "closed" ]]; then
-            item_id="$( gh api graphql -f query='
-              query($project:ID!, $issue:ID!) {
-                projectV2(id: $project) {
-                  items(first: 100) {
-                    nodes {
-                      id
-                      content {
-                        ... on Issue {
-                          id
-                        }
-                      }
-                    }
-                  }
-                }
-              }' -f project=$PROJECT_ID -f issue=$ISSUE_ID | jq -r '.data.projectV2.items.nodes[] | select(.content.id == "'$ISSUE_ID'") | .id')"
-            echo 'ITEM_ID='$item_id >> $GITHUB_ENV
-          fi
+              }
+            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
+          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
-      - name: Update Issue Status or Remove from Project
+      - name: Update Issue Status
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
@@ -147,18 +125,4 @@ jobs:
                   }
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f done_value=${{ env.DONE_OPTION_ID }}
-          
-          # If issue is closed as duplicate or not planned, remove from project
-          elif [[ "${{ github.event.action }}" == "closed" && \
-                  ("${{ github.event.issue.state_reason }}" == "duplicate" || \
-                   "${{ github.event.issue.state_reason }}" == "not_planned") ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!) {
-                deleteProjectV2Item(input: {
-                  projectId: $project
-                  itemId: $item
-                }) {
-                  deletedItemId
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID
           fi
