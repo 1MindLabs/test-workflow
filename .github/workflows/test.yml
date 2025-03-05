@@ -54,4 +54,5 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          gh api repos/$REPO/issues/$ISSUE_NUMBER/labels -f labels='["In Progress"]'
+          gh api -X POST repos/$REPO/issues/$ISSUE_NUMBER/labels \
+            -f labels='["In Progress"]'
