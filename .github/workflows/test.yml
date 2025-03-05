@@ -92,8 +92,34 @@ jobs:
               }
             }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
 
-      - name: Set Issue Status to "Done"
+      - name: Get Issue Item ID (for closed issue)
         if: github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ISSUE_ID: ${{ github.event.issue.node_id }}
+        run: |
+          item_id="$( gh api graphql -f query='
+            query($project: ID!, $issue: ID!) {
+              node(id: $project) {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          id
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f project=$PROJECT_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id')"
+
+          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
+
+      - name: Set Issue Status to "Done"
+        if: github.event.action == 'closed' && env.ITEM_ID != ''
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
