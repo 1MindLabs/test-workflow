@@ -100,7 +100,7 @@ jobs:
         run: |
           # Find the project item ID for this issue
           item_id="$( gh api graphql -f query='
-            query($project: ID!, $content: ID!) {
+            query($project: ID!) {
               node(id: $project) {
                 ... on ProjectV2 {
                   items(first: 100) {
@@ -115,7 +115,7 @@ jobs:
                   }
                 }
               }
-            }' -f project=$PROJECT_ID -f content=$ISSUE_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id' )"
+            }' -f project=$PROJECT_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id' )"
 
           if [[ -z "$item_id" ]]; then
             echo "Issue not found in project. Exiting."
