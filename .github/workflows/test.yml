@@ -1,90 +1,29 @@
-name: Automate Issues to Project
+name: Label Issues for Project Automation
 on:
   issues:
-    types:
-      - opened
-      - reopened
-      - closed
-      - assigned
-
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
-  repository-projects: write
+    types: [opened, reopened, closed, assigned]
 
 jobs:
-  issue_opened_and_reopened:
-    name: issue_opened_and_reopened
+  label_issue:
     runs-on: ubuntu-latest
-    if: github.repository == '1MindLabs/test-workflow' && (github.event.action == 'opened' || github.event.action == 'reopened')
     steps:
-      - name: Move issue to "Triage"
+      - name: Add "Triage" label to new issues
+        if: github.event.action == 'opened' || github.event.action == 'reopened'
         run: |
-          gh api graphql -f query='
-          mutation {
-            updateProjectV2ItemFieldValue(
-              input: {
-                projectId: "PVT_kwDOCrqp684Azk1R" 
-                itemId: "${{ github.event.issue.node_id }}" 
-                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
-                value: { singleSelectOptionId: "f75ad846" }
-              }
-            ) {
-              projectV2Item {
-                id
-              }
-            }
-          }'
+          gh issue edit ${{ github.event.issue.number }} --add-label "Triage"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  issue_closed:
-    name: issue_closed
-    runs-on: ubuntu-latest
-    if: github.repository == '1MindLabs/test-workflow' && github.event.action == 'closed'
-    steps:
-      - name: Move issue to "Done"
+      - name: Add "In Progress" label when assigned
+        if: github.event.action == 'assigned'
         run: |
-          gh api graphql -f query='
-          mutation {
-            updateProjectV2ItemFieldValue(
-              input: {
-                projectId: "PVT_kwDOCrqp684Azk1R"
-                itemId: "${{ github.event.issue.node_id }}"
-                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
-                value: { singleSelectOptionId: "98236657" }
-              }
-            ) {
-              projectV2Item {
-                id
-              }
-            }
-          }'
+          gh issue edit ${{ github.event.issue.number }} --add-label "In Progress"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  issue_assigned:
-    name: issue_assigned
-    runs-on: ubuntu-latest
-    if: github.repository == '1MindLabs/test-workflow' && github.event.action == 'assigned'
-    steps:
-      - name: Move issue to "In Progress"
+      - name: Add "Done" label when closed
+        if: github.event.action == 'closed'
         run: |
-          gh api graphql -f query='
-          mutation {
-            updateProjectV2ItemFieldValue(
-              input: {
-                projectId: "PVT_kwDOCrqp684Azk1R"
-                itemId: "${{ github.event.issue.node_id }}"
-                fieldId: "PVTSSF_lADOCrqp684Azk1RzgpWIT0"
-                value: { singleSelectOptionId: "47fc9ee4" }
-              }
-            ) {
-              projectV2Item {
-                id
-              }
-            }
-          }'
+          gh issue edit ${{ github.event.issue.number }} --add-label "Done"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
