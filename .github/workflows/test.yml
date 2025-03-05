@@ -19,19 +19,23 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PEM }}
 
-      - name: Get project data
+      - name: Get project and field IDs
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          ORGANIZATION: 1MindLabs
-          PROJECT_NUMBER: 8
+          ORGANIZATION: YOUR_ORGANIZATION
+          PROJECT_NUMBER: YOUR_PROJECT_NUMBER
         run: |
           gh api graphql -f query='
             query($org: String!, $number: Int!) {
-              organization(login: $org){
+              organization(login: $org) {
                 projectV2(number: $number) {
                   id
                   fields(first: 20) {
                     nodes {
+                      ... on ProjectV2Field {
+                        id
+                        name
+                      }
                       ... on ProjectV2SingleSelectField {
                         id
                         name
@@ -59,14 +63,14 @@ jobs:
           ISSUE_ID: ${{ github.event.issue.node_id }}
         run: |
           item_id="$( gh api graphql -f query='
-            mutation($project:ID!, $issue:ID!) {
-              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+            mutation($project: ID!, $issue: ID!) {
+              addProjectV2ItemById(input: { projectId: $project, contentId: $issue }) {
                 item {
                   id
                 }
               }
             }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
-          
+
           echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
       - name: Move Issue to "Triage"
@@ -75,11 +79,11 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: String!) {
+            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
               updateProjectV2ItemFieldValue(input: {
-                projectId: $project
-                itemId: $item
-                fieldId: $status_field
+                projectId: $project,
+                itemId: $item,
+                fieldId: $status_field,
                 value: { singleSelectOptionId: $status_value }
               }) {
                 projectV2Item {
@@ -94,11 +98,11 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: String!) {
+            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
               updateProjectV2ItemFieldValue(input: {
-                projectId: $project
-                itemId: $item
-                fieldId: $status_field
+                projectId: $project,
+                itemId: $item,
+                fieldId: $status_field,
                 value: { singleSelectOptionId: $status_value }
               }) {
                 projectV2Item {
@@ -113,11 +117,11 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: String!) {
+            mutation($project: ID!, $item: ID!, $status_field: ID!, $status_value: ID!) {
               updateProjectV2ItemFieldValue(input: {
-                projectId: $project
-                itemId: $item
-                fieldId: $status_field
+                projectId: $project,
+                itemId: $item,
+                fieldId: $status_field,
                 value: { singleSelectOptionId: $status_value }
               }) {
                 projectV2Item {
