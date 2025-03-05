@@ -1,14 +1,13 @@
-name: Manage Issue Status in Project
+name: Add Issue to Project and Set Status
 
 on:
   issues:
     types:
       - opened
       - reopened
-      - closed
 
 jobs:
-  update_issue_status:
+  add_issue_to_project:
     runs-on: ubuntu-latest
     steps:
       - name: Generate token
@@ -92,38 +91,11 @@ jobs:
               }
             }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
 
-      - name: Set Issue Status to "Done" when closed
+      - name: Set Issue Status to "Done"
         if: github.event.action == 'closed'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          ISSUE_ID: ${{ github.event.issue.node_id }}
         run: |
-          # Find the project item ID for this issue
-          item_id="$( gh api graphql -f query='
-            query($project: ID!) {
-              node(id: $project) {
-                ... on ProjectV2 {
-                  items(first: 100) {
-                    nodes {
-                      id
-                      content {
-                        ... on Issue {
-                          id
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }' -f project=$PROJECT_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id' )"
-
-          if [[ -z "$item_id" ]]; then
-            echo "Issue not found in project. Exiting."
-            exit 0
-          fi
-
-          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
-
           gh api graphql -f query='
             mutation($project: ID!, $item: ID!, $status_field: ID!, $done_value: String!) {
               updateProjectV2ItemFieldValue(input: {
