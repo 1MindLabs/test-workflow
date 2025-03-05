@@ -46,7 +46,7 @@ jobs:
               }
             }' -f project=$project_id -f issue=$ISSUE_ID
 
-      # 🔹 Label issue as "In Progress" when assigned
+      # 🔹 Label issue as "In Progress" when assigned (Using Correct Format)
       - name: Label Issue "In Progress"
         if: github.event.action == 'assigned'
         env:
@@ -54,5 +54,9 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          gh api -X POST repos/$REPO/issues/$ISSUE_NUMBER/labels \
-            -f labels='["In Progress"]'
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/$REPO/issues/$ISSUE_NUMBER/labels \
+            -f "labels[]=In Progress"
