@@ -114,12 +114,12 @@ jobs:
                   }
                 }
               }
-            }' -f project=$PROJECT_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id')"
+            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.node.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id')"
 
           echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
       - name: Set Issue Status to "Done"
-        if: github.event.action == 'closed' && env.ITEM_ID != ''
+        if: github.event.action == 'closed'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
