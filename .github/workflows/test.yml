@@ -1,12 +1,13 @@
-name: Add Issue to Project and Update Status
+name: Manage Issue Project Workflow
 on:
   issues:
     types:
       - opened
       - reopened
+      - closed
       - assigned
 jobs:
-  add_issue_to_project:
+  manage_issue_project:
     runs-on: ubuntu-latest
     steps:
       - name: Generate token
@@ -50,6 +51,7 @@ jobs:
           echo 'STATUS_FIELD_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .id' project_data.json) >> $GITHUB_ENV
           echo 'TRIAGE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Triage") | .id' project_data.json) >> $GITHUB_ENV
           echo 'IN_PROGRESS_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' project_data.json) >> $GITHUB_ENV
+          echo 'DONE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' project_data.json) >> $GITHUB_ENV
 
       - name: Add Issue to Project
         env:
@@ -66,7 +68,7 @@ jobs:
             }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectV2ItemById.item.id')"
           echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
-      - name: Set Issue Status to Triage or In Progress
+      - name: Update Issue Status
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
@@ -105,4 +107,22 @@ jobs:
                   }
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
+          
+          # If issue is closed as completed, set status to Done
+          elif [[ "${{ github.event.action }}" == "closed" && "${{ github.event.issue.state_reason }}" == "completed" ]]; then
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!, $status_field: ID!, $done_value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project
+                  itemId: $item
+                  fieldId: $status_field
+                  value: {
+                    singleSelectOptionId: $done_value
+                  }
+                }) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f done_value=${{ env.DONE_OPTION_ID }}
           fi
