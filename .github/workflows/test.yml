@@ -5,6 +5,7 @@ on:
     types:
       - opened
       - reopened
+      - closed
 
 jobs:
   add_issue_to_project:
