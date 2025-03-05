@@ -71,7 +71,7 @@ jobs:
                   }
                 }
               }
-            }' -f issue=$ISSUE_ID --jq '.data.node.projectItems.nodes[0].id')"
+            }' -F issue=$ISSUE_ID --jq '.data.node.projectItems.nodes[0].id')"
 
           # Update the issue status to "In Progress"
           gh api graphql -f query='
@@ -88,4 +88,4 @@ jobs:
                   id
                 }
               }
-            }' -f project=$PROJECT_ID -f item=$item_id -f status_field=$STATUS_FIELD_ID -f status_value=$IN_PROGRESS_OPTION_ID
+            }' -F project=$PROJECT_ID -F item=$item_id -F status_field=$STATUS_FIELD_ID -F status_value=$IN_PROGRESS_OPTION_ID
