@@ -1,14 +1,13 @@
-name: Manage Issue Status in Project
+name: Add Issue to Project and Set Status
 
 on:
   issues:
     types:
       - opened
       - reopened
-      - closed
 
 jobs:
-  update_issue_status:
+  add_issue_to_project:
     runs-on: ubuntu-latest
     steps:
       - name: Generate token
@@ -52,10 +51,8 @@ jobs:
           echo 'PROJECT_ID='$(jq '.data.organization.projectV2.id' project_data.json) >> $GITHUB_ENV
           echo 'STATUS_FIELD_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .id' project_data.json) >> $GITHUB_ENV
           echo 'TRIAGE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Triage") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'DONE_OPTION_ID='$(jq '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' project_data.json) >> $GITHUB_ENV
 
-      - name: Add Issue to Project (if needed)
-        if: github.event.action == 'opened' || github.event.action == 'reopened'
+      - name: Add Issue to Project
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           ISSUE_ID: ${{ github.event.issue.node_id }}
@@ -71,8 +68,7 @@ jobs:
 
           echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
-      - name: Set Issue Status to "Triage" (if opened/reopened)
-        if: github.event.action == 'opened' || github.event.action == 'reopened'
+      - name: Set Issue Status to "Triage"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
@@ -91,24 +87,3 @@ jobs:
                 }
               }
             }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
-
-      - name: Set Issue Status to "Done" (if closed)
-        if: github.event.action == 'closed'
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $status_field: ID!, $done_value: String!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $project
-                itemId: $item
-                fieldId: $status_field
-                value: {
-                  singleSelectOptionId: $done_value
-                }
-              }) {
-                projectV2Item {
-                  id
-                }
-              }
-            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f done_value=${{ env.DONE_OPTION_ID }}
