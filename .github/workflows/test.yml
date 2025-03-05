@@ -58,9 +58,10 @@ jobs:
           ISSUE_ID: ${{ github.event.issue.node_id }}
         run: |
           item_id="$( gh api graphql -f query='
-            query($project: ID!, $issue: ID!) {
-              organization(login: "1MindLabs") {
-                projectV2(number: 8) {
+            query($org: String!, $number: Int!, $issue: ID!) {
+              organization(login: $org) {
+                projectV2(number: $number) {
+                  id
                   items(first: 100) {
                     nodes {
                       id
@@ -73,7 +74,7 @@ jobs:
                   }
                 }
               }
-            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.organization.projectV2.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id')"
+            }' -f org=1MindLabs -F number=8 -f issue=$ISSUE_ID --jq '.data.organization.projectV2.items.nodes[] | select(.content.id=="'$ISSUE_ID'") | .id')"
 
           echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
