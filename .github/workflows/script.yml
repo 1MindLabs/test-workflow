@@ -1,9 +1,6 @@
 name: Clean Project Board
+
 on:
-  # Run weekly, or adjust as needed
-  schedule:
-    - cron: '0 0 * * 0'  # Every Sunday at midnight
-  # Optional: Allow manual triggering
   workflow_dispatch:
 
 jobs:
@@ -43,7 +40,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          # Fetch all items in the project
           project_items=$(gh api graphql -f query='
             query($projectId: ID!) {
               node(id: $projectId) {
@@ -65,13 +61,11 @@ jobs:
               }
             }' -f projectId=$PROJECT_ID)
 
-          # Process and remove closed issues marked as duplicate or not planned
           items_to_remove=$(echo "$project_items" | jq -r '.data.node.items.nodes[] | 
             select(.content.state == "CLOSED" and 
                    (.content.stateReason == "DUPLICATE" or .content.stateReason == "NOT_PLANNED")) | 
             .id')
 
-          # Remove items from the project board
           for item_id in $items_to_remove; do
             echo "Removing item: $item_id"
             gh api graphql -f query='
