@@ -27,45 +27,49 @@ jobs:
           ORGANIZATION: 1MindLabs
           PROJECT_NUMBER: 8
         run: |
-          gh api graphql -f query='
+          project_info=$(gh api graphql -f query='
             query($org: String!, $number: Int!) {
               organization(login: $org){
                 projectV2(number: $number) {
                   id
+                  title
                 }
               }
-            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
-          echo 'PROJECT_ID='$(jq '.data.organization.projectV2.id' project_data.json) >> $GITHUB_ENV
+            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER)
+          
+          echo 'PROJECT_ID='$(echo "$project_info" | jq -r '.data.organization.projectV2.id') >> $GITHUB_ENV
 
       - name: Clean Project Board
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           # Fetch all items in the project
-          gh api graphql -f query='
-            query($project:ID!) {
-              projectV2(id: $project) {
-                items(first: 100) {
-                  nodes {
-                    id
-                    content {
-                      ... on Issue {
-                        id
-                        title
-                        state
-                        stateReason
+          project_items=$(gh api graphql -f query='
+            query($projectId: ID!) {
+              node(id: $projectId) {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          id
+                          title
+                          state
+                          stateReason
+                        }
                       }
                     }
                   }
                 }
               }
-            }' -f project=$PROJECT_ID > project_items.json
+            }' -f projectId=$PROJECT_ID)
 
           # Process and remove closed issues marked as duplicate or not planned
-          items_to_remove=$(jq -r '.data.projectV2.items.nodes[] | 
+          items_to_remove=$(echo "$project_items" | jq -r '.data.node.items.nodes[] | 
             select(.content.state == "CLOSED" and 
                    (.content.stateReason == "DUPLICATE" or .content.stateReason == "NOT_PLANNED")) | 
-            .id' project_items.json)
+            .id')
 
           # Remove items from the project board
           for item_id in $items_to_remove; do
@@ -83,8 +87,6 @@ jobs:
 
       - name: Log Cleanup
         if: always()
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           echo "Project board cleanup completed."
           echo "Total items removed: $(echo "$items_to_remove" | wc -l)"
