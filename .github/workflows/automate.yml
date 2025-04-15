@@ -155,5 +155,5 @@ jobs:
           
           if [ -s contributor_info.md ] && grep -q "role: intern" contributor_info.md; then
             echo "User $ASSIGNEE is a core contributor. Adding core label."
-            gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
+            gh issue edit $ISSUE_NUMBER --add-label "browser extension (content-script)" --repo $REPO
           fi
