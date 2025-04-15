@@ -150,10 +150,22 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
+          # Download the file directly
           curl -s -H "Authorization: token $GH_TOKEN" \
             "https://raw.githubusercontent.com/ohcnetwork/leaderboard-data/main/contributors/${ASSIGNEE}.md" > contributor_info.md
           
+          # Check if file exists and contains "role: core"
           if [ -s contributor_info.md ] && grep -q "role: intern" contributor_info.md; then
             echo "User $ASSIGNEE is a core contributor. Adding core label."
-            gh issue edit $ISSUE_NUMBER --add-label "browser extension (content-script)" --repo $REPO
+            
+            # Debug output
+            echo "Adding 'core' label to issue #$ISSUE_NUMBER in $REPO"
+            
+            # Add the label using the GitHub CLI with verbose output
+            gh issue edit $ISSUE_NUMBER --add-label "browser extension (content-script)" --repo $REPO --verbose
+            
+            # Verify the label was added
+            gh issue view $ISSUE_NUMBER --repo $REPO --json labels
+          else
+            echo "Either file not found or user is not a core contributor"
           fi
