@@ -153,7 +153,7 @@ jobs:
           curl -s -H "Authorization: token $GH_TOKEN" \
             "https://raw.githubusercontent.com/ohcnetwork/leaderboard-data/main/contributors/${ASSIGNEE}.md" > contributor_info.md
           
-          if [ -s contributor_info.md ] && grep -q "role: intern" contributor_info.md; then
+          if [ -s contributor_info.md ] && grep -q "role : intern" contributor_info.md; then
             echo "User $ASSIGNEE is a core contributor. Adding core label."
             gh issue edit $ISSUE_NUMBER --add-label "browser extension (content-script)" --repo $REPO
           fi
