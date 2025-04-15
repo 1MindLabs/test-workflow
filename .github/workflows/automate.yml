@@ -160,7 +160,7 @@ jobs:
             echo "File found for $ASSIGNEE. Checking content:"
             cat contributor_info.md
             
-            if grep -q "role: intern" contributor_info.md; then
+            if grep -q "role : intern" contributor_info.md; then
               echo "User $ASSIGNEE is an intern. Adding browser extension label."
               gh issue edit $ISSUE_NUMBER --add-label "browser extension (content-script)" --repo $REPO
             else
