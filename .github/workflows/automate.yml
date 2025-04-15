@@ -150,21 +150,10 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          contributor_file=$(curl -s -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/ohcnetwork/leaderboard-data/contents/contributors/${ASSIGNEE}.md" \
-            | jq -r '.content' 2>/dev/null)
+          curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://raw.githubusercontent.com/ohcnetwork/leaderboard-data/main/contributors/${ASSIGNEE}.md" > contributor_info.md
           
-          if [ -n "$contributor_file" ]; then
-            echo $contributor_file | base64 -d > contributor_info.md
-            
-            if grep -q "role: intern" contributor_info.md; then
-              echo "User $ASSIGNEE is a core contributor. Adding core label."
-              
-              # Add the core label to the issue
-              gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
-            else
-              echo "User $ASSIGNEE is not a core contributor."
-            fi
-          else
-            echo "Contributor file not found for $ASSIGNEE"
+          if [ -s contributor_info.md ] && grep -q "role: intern" contributor_info.md; then
+            echo "User $ASSIGNEE is a core contributor. Adding core label."
+            gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
           fi
