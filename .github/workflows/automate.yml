@@ -4,8 +4,6 @@ on:
   issues:
     types:
       - opened
-      - reopened
-      - assigned
       - closed
 
 jobs:
@@ -77,7 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          if [[ "${{ github.event.action }}" == "opened" || "${{ github.event.action }}" == "reopened" ]]; then
+          if [[ "${{ github.event.action }}" == "opened" ]]; then
             gh api graphql -f query='
               mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
                 updateProjectV2ItemFieldValue(input: {
@@ -93,23 +91,6 @@ jobs:
                   }
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
-          
-          elif [[ "${{ github.event.action }}" == "assigned" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $in_progress_value
-                  }
-                }) {
-                  projectV2Item {
-                    id
-                  }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
           
           elif [[ "${{ github.event.action }}" == "closed" && "${{ github.event.issue.state_reason }}" == "completed" ]]; then
             gh api graphql -f query='
@@ -142,14 +123,37 @@ jobs:
               }' -f project=$PROJECT_ID -f item=$ITEM_ID
           fi
 
-      - name: Check if assignee is core and add label
-        if: github.event.action == 'assigned'
+      # Add an issue event watcher
+      - name: Check if assigned and update status
+        if: github.event.action == 'opened'
         env:
-          ASSIGNEE: ${{ github.event.assignee.login }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          if curl -s "https://raw.githubusercontent.com/ohcnetwork/leaderboard-data/main/contributors/${ASSIGNEE}.md" | grep -q "role : core"; then
-            gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
+          # Check if issue is already assigned
+          assignee=$(gh issue view $ISSUE_NUMBER --repo $REPO --json assignees -q '.assignees[0].login')
+          
+          if [[ -n "$assignee" ]]; then
+            # Update status to In Progress
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project
+                  itemId: $item
+                  fieldId: $status_field
+                  value: {
+                    singleSelectOptionId: $in_progress_value
+                  }
+                }) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
+            
+            # Check if assignee is core and add label
+            if curl -s "https://raw.githubusercontent.com/ohcnetwork/leaderboard-data/main/contributors/${assignee}.md" | grep -q "role : core"; then
+              gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
+            fi
           fi
