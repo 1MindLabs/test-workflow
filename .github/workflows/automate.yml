@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Generate token
         id: generate-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PEM }}
@@ -140,4 +140,23 @@ jobs:
                   deletedItemId
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID
+          fi
+
+      - name: Check if assignee is core and add label
+        if: github.event.action == 'assigned'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ASSIGNEE: ${{ github.event.assignee.login }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          contributor_file=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/ohcnetwork/leaderboard-data/contents/contributors/${ASSIGNEE}.md" \
+            | jq -r '.content' 2>/dev/null)
+
+          if [ -n "$contributor_file" ]; then
+            echo $contributor_file | base64 -d > contributor_info.md
+            if grep -q "role: intern" contributor_info.md; then
+              gh issue edit $ISSUE_NUMBER --add-label "intern" --repo $REPO
+            fi
           fi
