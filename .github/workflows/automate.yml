@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Generate token
         id: generate-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PEM }}
@@ -153,10 +153,18 @@ jobs:
           contributor_file=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/repos/ohcnetwork/leaderboard-data/contents/contributors/${ASSIGNEE}.md" \
             | jq -r '.content' 2>/dev/null)
-
+          
           if [ -n "$contributor_file" ]; then
             echo $contributor_file | base64 -d > contributor_info.md
+            
             if grep -q "role: intern" contributor_info.md; then
-              gh issue edit $ISSUE_NUMBER --add-label "intern" --repo $REPO
+              echo "User $ASSIGNEE is a core contributor. Adding core label."
+              
+              # Add the core label to the issue
+              gh issue edit $ISSUE_NUMBER --add-label "core" --repo $REPO
+            else
+              echo "User $ASSIGNEE is not a core contributor."
             fi
+          else
+            echo "Contributor file not found for $ASSIGNEE"
           fi
