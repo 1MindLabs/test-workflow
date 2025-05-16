@@ -84,29 +84,54 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
+          # Get current issue information
+          ISSUE_STATE=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.state')
+          ASSIGNEES_COUNT=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.assignees | length')
+          
+          # Debug information
+          echo "Issue state: $ISSUE_STATE"
+          echo "Assignees count: $ASSIGNEES_COUNT"
+          echo "Event action: ${{ github.event.action }}"
+          
           if [[ "${{ github.event.action }}" == "opened" || "${{ github.event.action }}" == "reopened" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $triage_value
+            if [[ $ASSIGNEES_COUNT -gt 0 ]]; then
+              # If issue is opened/reopened with assignees, set to In Progress
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project
+                    itemId: $item
+                    fieldId: $status_field
+                    value: {
+                      singleSelectOptionId: $in_progress_value
+                    }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
                   }
-                }) {
-                  projectV2Item {
-                    id
+                }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
+            else
+              # If issue is opened/reopened without assignees, set to Triage
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project
+                    itemId: $item
+                    fieldId: $status_field
+                    value: {
+                      singleSelectOptionId: $triage_value
+                    }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
                   }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
-
+                }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
+            fi
           elif [[ "${{ github.event.action }}" == "assigned" ]]; then
-            # Check if the issue is closed before changing status to In Progress
-            ISSUE_STATE=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.state')
-            
+            # Set to In Progress only if issue is open
             if [[ "$ISSUE_STATE" != "closed" ]]; then
-              # Get current status to prevent unnecessary changes
               gh api graphql -f query='
                 mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
                   updateProjectV2ItemFieldValue(input: {
@@ -123,47 +148,24 @@ jobs:
                   }
                 }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
             fi
-
           elif [[ "${{ github.event.action }}" == "unassigned" ]]; then
-            ASSIGNEES_COUNT=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.assignees | length')
-            ISSUE_STATE=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.state')
-
-            # Only change status if issue is open AND has no assignees
+            # Set back to Triage only if there are no assignees left AND the issue is open
             if [[ $ASSIGNEES_COUNT -eq 0 && "$ISSUE_STATE" != "closed" ]]; then
-              # Fetch current status first
-              CURRENT_STATUS=$(gh api graphql -f query='
-                query($project: ID!, $item: ID!, $status_field: ID!) {
-                  node(id: $project) {
-                    ... on ProjectV2 {
-                      item(id: $item) {
-                        fieldValueByName(name: "Status") {
-                          ... on ProjectV2ItemFieldSingleSelectValue {
-                            name
-                          }
-                        }
-                      }
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project
+                    itemId: $item
+                    fieldId: $status_field
+                    value: {
+                      singleSelectOptionId: $triage_value
+                    }
+                  }) {
+                    projectV2Item {
+                      id
                     }
                   }
-                }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID --jq '.data.node.item.fieldValueByName.name')
-              
-              # Only update if current status is not already Triage
-              if [[ "$CURRENT_STATUS" != "Triage" ]]; then
-                gh api graphql -f query='
-                  mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
-                    updateProjectV2ItemFieldValue(input: {
-                      projectId: $project
-                      itemId: $item
-                      fieldId: $status_field
-                      value: {
-                        singleSelectOptionId: $triage_value
-                      }
-                    }) {
-                      projectV2Item {
-                        id
-                      }
-                    }
-                  }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
-              fi
+                }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
 
               gh api graphql -f query='
                 mutation($project: ID!, $item: ID!, $team_field: ID!) {
