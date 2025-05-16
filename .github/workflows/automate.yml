@@ -101,7 +101,7 @@ jobs:
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
 
-          elif [[ "${{ github.event.action }}" == "assigned" ]]; then
+          elif [[ "${{ github.event.action }}" == "assigned" && "${{ github.event.issue.state }}" != "closed" ]]; then
             gh api graphql -f query='
               mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
                 updateProjectV2ItemFieldValue(input: {
