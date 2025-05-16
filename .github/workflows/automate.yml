@@ -101,27 +101,32 @@ jobs:
                 }
               }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f triage_value=${{ env.TRIAGE_OPTION_ID }}
 
-          elif [[ "${{ github.event.action }}" == "assigned" && "${{ github.event.issue.state }}" != "closed" ]]; then
-            gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $project
-                  itemId: $item
-                  fieldId: $status_field
-                  value: {
-                    singleSelectOptionId: $in_progress_value
+          elif [[ "${{ github.event.action }}" == "assigned" ]]; then
+            ISSUE_STATE=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.state')
+
+            if [[ "$ISSUE_STATE" != "closed" ]]; then
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $status_field: ID!, $in_progress_value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project
+                    itemId: $item
+                    fieldId: $status_field
+                    value: {
+                      singleSelectOptionId: $in_progress_value
+                    }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
                   }
-                }) {
-                  projectV2Item {
-                    id
-                  }
-                }
-              }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
+                }' -f project=$PROJECT_ID -f item=$ITEM_ID -f status_field=$STATUS_FIELD_ID -f in_progress_value=${{ env.IN_PROGRESS_OPTION_ID }}
+            fi
 
           elif [[ "${{ github.event.action }}" == "unassigned" ]]; then
             ASSIGNEES_COUNT=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.assignees | length')
+            ISSUE_STATE=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.state')
 
-            if [[ $ASSIGNEES_COUNT -eq 0 ]]; then
+            if [[ $ASSIGNEES_COUNT -eq 0 && "$ISSUE_STATE" != "closed" ]]; then
               gh api graphql -f query='
                 mutation($project: ID!, $item: ID!, $status_field: ID!, $triage_value: String!) {
                   updateProjectV2ItemFieldValue(input: {
